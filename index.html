@@ -1,0 +1,1022 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>ZeroTrail: waste that sorts itself</title>
+<meta name="description" content="ZeroTrail builds a smart bin that sorts waste on its own, and an operating system for everything that happens to waste after that.">
+<meta name="theme-color" content="#142036">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,400..800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --sky:#142036; --sky2:#1C2B47; --line:#34486B; --glacier:#EEF1EC; --stone:#AEB6C1; --faint:#8E99A8;
+  --apricot:#F2A65A; --moss:#86B86B; --ice:#86C3E8; --other:#C9BFAE; --ink:#15202F;
+  --pad:clamp(20px,5vw,84px);
+  --ease:cubic-bezier(.2,.7,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;height:100%;overflow:hidden;background:var(--sky);color:var(--glacier);font-family:"Bricolage Grotesque","Avenir Next","Segoe UI",sans-serif;-webkit-font-smoothing:antialiased}
+button{font:inherit;color:inherit;touch-action:manipulation;-webkit-tap-highlight-color:transparent}
+:focus-visible{outline:3px solid var(--ice);outline-offset:3px}
+
+.ridge{position:fixed;left:0;right:0;bottom:0;width:100%;height:30vh;z-index:0;pointer-events:none}
+
+.deck{position:fixed;inset:0;z-index:1;perspective:1800px;overflow:hidden}
+.slide{position:absolute;inset:0;display:flex;flex-direction:column;
+  padding:calc(var(--pad) + env(safe-area-inset-top,0px)) var(--pad) calc(var(--pad) + 60px + env(safe-area-inset-bottom,0px));
+  overflow-y:auto;overflow-x:hidden;touch-action:pan-y;-webkit-overflow-scrolling:touch;opacity:0;visibility:hidden;
+  transform:translate3d(24%,0,-520px) rotateY(-16deg);
+  transition:transform .85s var(--ease),opacity .6s ease,visibility 0s linear .85s}
+.slide.is-past{transform:translate3d(-24%,0,-520px) rotateY(16deg)}
+.slide.is-active{opacity:1;visibility:visible;transform:none;transition:transform .85s var(--ease),opacity .6s ease,visibility 0s}
+.inner{margin-block:auto;width:100%;max-width:1440px;margin-inline:auto}
+
+.display{margin:0;font-size:clamp(52px,8.2vw,134px);line-height:.9;letter-spacing:-.045em;font-weight:800;max-width:9ch}
+h2{margin:0 0 .4em;font-size:clamp(34px,4.6vw,72px);line-height:1;letter-spacing:-.03em;font-weight:760;max-width:17ch}
+h3{margin:0;font-size:clamp(20px,1.7vw,26px);line-height:1.15;letter-spacing:-.01em;font-weight:700}
+p{margin:0}
+.lede{font-size:clamp(18px,1.55vw,24px);line-height:1.45;color:var(--stone);max-width:36ch;margin-top:1.1em}
+.body{font-size:clamp(16px,1.25vw,20px);line-height:1.5;color:var(--stone);max-width:46ch}
+.source{margin-top:28px;font-size:13px;line-height:1.5;color:var(--faint);max-width:80ch}
+.wordmark{display:flex;align-items:center;gap:10px;font-weight:800;font-size:22px;letter-spacing:-.02em;margin-bottom:28px}
+.wordmark i{display:inline-flex;gap:4px}
+.wordmark i b{display:block;width:9px;height:9px;border-radius:2px}
+
+.split{display:grid;grid-template-columns:minmax(0,5fr) minmax(0,7fr);gap:clamp(24px,4vw,72px);align-items:center}
+.split--even{grid-template-columns:minmax(0,1fr) minmax(0,1fr)}
+
+.btn{display:inline-flex;align-items:center;justify-content:center;min-height:46px;padding:11px 20px;border-radius:999px;border:1.5px solid var(--line);background:transparent;color:var(--glacier);font-weight:650;font-size:16px;cursor:pointer;transition:background .2s,border-color .2s,color .2s}
+.btn:hover{border-color:var(--stone)}
+.btn:disabled{opacity:.45;cursor:not-allowed}
+.btn-primary{background:var(--apricot);border-color:var(--apricot);color:#1D1A16}
+.btn-primary:hover{background:#F6B878;border-color:#F6B878}
+.cta-row{display:flex;flex-wrap:wrap;gap:12px;margin-top:36px}
+
+.stage{position:relative;width:100%;height:min(70vh,660px);min-height:320px}
+.stage canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none;cursor:grab}
+.stage canvas:active{cursor:grabbing}
+.stage-hint{position:absolute;right:8px;bottom:4px;z-index:2;font-size:14px;color:var(--faint);pointer-events:none}
+.nogl{position:absolute;inset:0;display:grid;place-items:center;text-align:center;color:var(--stone);padding:24px}
+
+/* problem */
+.facts{list-style:none;margin:0;padding:0}
+.facts li{padding:20px 0;border-top:1.5px solid var(--line);font-size:clamp(16px,1.3vw,20px);line-height:1.5;color:var(--stone)}
+.facts li:last-child{border-bottom:1.5px solid var(--line)}
+.facts strong{display:block;color:var(--glacier);font-size:clamp(19px,1.6vw,24px);font-weight:700;margin-bottom:4px;letter-spacing:-.01em}
+
+/* demo */
+.demo-panel h2{max-width:14ch}
+.drop-row{display:flex;flex-wrap:wrap;gap:10px;margin-top:8px}
+.readout{margin-top:26px;min-height:2.6em;font-size:clamp(20px,1.8vw,27px);line-height:1.3;font-weight:650;letter-spacing:-.01em}
+.steps{list-style:none;margin:18px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:8px}
+.steps li{padding:7px 14px;border:1.5px solid var(--line);border-radius:999px;font-size:15px;color:var(--faint);transition:all .2s}
+.steps li.is-done{color:var(--glacier);border-color:var(--stone)}
+.steps li.is-now{background:var(--apricot);border-color:var(--apricot);color:#1D1A16}
+.tally{display:flex;flex-wrap:wrap;gap:22px;margin-top:26px;font-size:17px;color:var(--stone)}
+.tally span{display:inline-flex;align-items:center;gap:8px}
+.tally b{color:var(--glacier);font-weight:700;font-variant-numeric:tabular-nums}
+.sw{display:inline-block;width:13px;height:13px;border-radius:3px}
+.sw-wet{background:var(--moss)} .sw-dry{background:var(--ice)} .sw-other{background:var(--other)}
+.case-row{margin-top:26px}
+
+/* how it works */
+.flow{list-style:none;margin:36px 0 0;padding:0;display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:clamp(14px,2vw,30px);counter-reset:none}
+.flow li{position:relative;padding-top:58px}
+.flow li::before{content:"";position:absolute;left:0;right:-30px;top:19px;height:1.5px;background:var(--line)}
+.flow li:last-child::before{right:0}
+.flow .n{position:absolute;top:0;left:0;width:40px;height:40px;border-radius:50%;background:var(--sky);border:1.5px solid var(--apricot);display:grid;place-items:center;font-weight:700;color:var(--apricot);font-variant-numeric:tabular-nums}
+.flow p{margin-top:10px;font-size:clamp(15px,1.15vw,18px);line-height:1.5;color:var(--stone)}
+.summary{margin-top:44px;font-size:clamp(19px,1.6vw,25px);line-height:1.4;max-width:44ch;font-weight:560}
+
+/* os stack */
+.stack-wrap{position:relative;height:min(64vh,580px);min-height:360px;display:grid;place-items:center;perspective:1400px}
+.stack{--gap:58px;position:relative;width:min(34vw,360px);aspect-ratio:1;transform-style:preserve-3d;transform:rotateX(58deg) rotateZ(-40deg) translateZ(-110px)}
+.plate{position:absolute;inset:0;border-radius:16px;border:1.5px solid var(--line);background:rgba(28,43,71,.9);color:var(--glacier);
+  display:flex;align-items:flex-end;justify-content:flex-start;padding:18px 22px;font-weight:750;font-size:22px;letter-spacing:-.01em;cursor:pointer;
+  transform:translateZ(calc(var(--i) * var(--gap)));transition:transform .5s var(--ease),background .3s,color .3s,border-color .3s}
+.plate:hover{border-color:var(--stone)}
+.plate.is-on{background:var(--apricot);border-color:var(--apricot);color:#1D1A16;transform:translateZ(calc(var(--i) * var(--gap) + var(--gap) * .3))}
+.plate[data-layer="devices"]{background:rgba(24,37,62,.95)}
+.plate[data-layer="devices"].is-on{background:var(--apricot)}
+.layer-detail{margin-top:28px;padding-top:22px;border-top:1.5px solid var(--line);min-height:170px}
+.layer-chips{display:flex;flex-wrap:wrap;gap:8px;margin-bottom:18px}
+.chip{min-height:44px;padding:8px 16px;border-radius:999px;border:1.5px solid var(--line);background:transparent;color:var(--stone);font-weight:650;font-size:15px;cursor:pointer}
+.chip:hover{border-color:var(--stone);color:var(--glacier)}
+.chip[aria-pressed="true"]{background:var(--apricot);border-color:var(--apricot);color:#1D1A16}
+.layer-detail p{margin-top:10px;font-size:clamp(16px,1.3vw,20px);line-height:1.5;color:var(--stone);max-width:42ch}
+.split--os{grid-template-areas:"text stack" "detail stack";row-gap:0}
+.os-text{grid-area:text;align-self:end}
+.split--os .stack-wrap{grid-area:stack}
+.split--os .layer-detail{grid-area:detail;align-self:start}
+.wheel-list{display:none;list-style:none;margin:8px 0 0;padding:0}
+.wheel-list li{position:relative;padding:14px 0 14px 34px;font-size:19px;font-weight:650;border-left:2px solid var(--apricot);margin-left:9px}
+.wheel-list li::before{content:"";position:absolute;left:-10px;top:19px;width:18px;height:18px;border-radius:50%;background:var(--apricot)}
+.wheel-note{display:none;margin-top:16px;font-size:17px;color:var(--stone)}
+
+/* business model */
+.plans{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(12px,1.6vw,24px);margin-top:34px}
+.flip{background:none;border:0;padding:0;perspective:1200px;text-align:left;cursor:pointer;display:block;width:100%}
+.flip-inner{display:block;position:relative;width:100%;min-height:340px;transform-style:preserve-3d;transition:transform .75s var(--ease)}
+.flip.is-flipped .flip-inner{transform:rotateY(180deg)}
+.face{position:absolute;inset:0;backface-visibility:hidden;-webkit-backface-visibility:hidden;border-radius:8px;padding:clamp(20px,2vw,30px);display:flex;flex-direction:column;gap:12px}
+.face-front{color:var(--ink)}
+.face-back{transform:rotateY(180deg);background:var(--sky2);border:1.5px solid var(--line);color:var(--glacier)}
+.face-back p{color:var(--stone);font-size:16px;line-height:1.5}
+.face-back h3{font-size:18px}
+.plan-tag{font-weight:800;font-size:clamp(40px,4.4vw,68px);letter-spacing:-.04em;line-height:.9}
+.face-front h3{margin-top:auto}
+.face-front p{font-size:clamp(15px,1.15vw,18px);line-height:1.45}
+.plan-haas .face-front{background:var(--apricot)}
+.plan-saas .face-front{background:var(--ice)}
+.plan-daas .face-front{background:var(--moss)}
+.plan-haas .face-back{border-color:var(--apricot)}
+.plan-saas .face-back{border-color:var(--ice)}
+.plan-daas .face-back{border-color:var(--moss)}
+.tbd{color:var(--apricot) !important;font-weight:650}
+.hint{margin-top:16px;font-size:15px;color:var(--faint)}
+
+/* flywheel */
+.wheel{width:100%;max-width:640px;height:auto;display:block;margin-inline:auto}
+
+/* why now */
+.reasons{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(18px,2.6vw,44px);margin-top:30px}
+.reasons div{padding-top:18px;border-top:3px solid var(--apricot)}
+.reasons p{margin-top:10px;font-size:clamp(15px,1.2vw,19px);line-height:1.5;color:var(--stone)}
+.ladakh{margin-top:44px;font-size:clamp(20px,1.8vw,28px);line-height:1.35;font-weight:600;max-width:40ch;letter-spacing:-.01em}
+
+/* roadmap */
+.road{list-style:none;padding:0;margin:40px 0 0;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:clamp(18px,2.6vw,44px)}
+.road li{position:relative;padding-top:40px}
+.road li::before{content:"";position:absolute;left:0;right:calc(-1 * clamp(18px,2.6vw,44px));top:9px;height:1.5px;background:var(--line)}
+.road li:last-child::before{right:0}
+.road li::after{content:"";position:absolute;left:0;top:0;width:20px;height:20px;border-radius:50%;background:var(--sky);border:1.5px solid var(--stone)}
+.road li:first-child::after{background:var(--apricot);border-color:var(--apricot)}
+.road p{margin-top:10px;font-size:clamp(15px,1.25vw,19px);line-height:1.5;color:var(--stone);max-width:34ch}
+
+/* close */
+.contact{display:flex;flex-wrap:wrap;gap:28px;margin-top:30px;font-size:18px;color:var(--stone)}
+
+/* chrome */
+.controls{position:fixed;left:0;right:0;bottom:0;z-index:5;background:linear-gradient(to top,rgba(20,32,54,.97) 55%,rgba(20,32,54,0));display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:12px var(--pad) calc(14px + env(safe-area-inset-bottom,0px))}
+.controls .brand{font-weight:800;letter-spacing:-.02em;font-size:17px;color:var(--stone)}
+.nav{display:flex;align-items:center;gap:8px}
+.icon-btn{width:46px;height:46px;border-radius:50%;border:1.5px solid var(--line);background:rgba(20,32,54,.85);display:grid;place-items:center;cursor:pointer;color:var(--glacier)}
+.icon-btn:hover{border-color:var(--stone)}
+.icon-btn:disabled{opacity:.35;cursor:not-allowed}
+.icon-btn svg{width:20px;height:20px}
+.counter{min-width:64px;text-align:center;font-size:15px;color:var(--stone);font-variant-numeric:tabular-nums}
+.progress{position:fixed;left:0;right:0;bottom:0;height:3px;z-index:6;pointer-events:none}
+.progress span{display:block;height:100%;background:var(--apricot);transform-origin:left center;transform:scaleX(.1);transition:transform .6s var(--ease)}
+
+@media (max-width:900px){
+  .split,.split--even{grid-template-columns:1fr}
+  .stage{height:46vh}
+  .flow{grid-template-columns:1fr}
+  .flow li::before{display:none}
+  .plans,.reasons,.road{grid-template-columns:1fr}
+  .road li::before{display:none}
+  .flip-inner{min-height:250px}
+  .stack{width:min(64vw,300px)}
+  .stack-wrap{height:44vh;min-height:300px}
+  .display{max-width:none}
+  .controls .brand{display:none}
+  .split--demo .stage{order:-1;height:40vh;min-height:280px}
+  .split--demo h2{font-size:clamp(28px,7.4vw,40px)}
+  .split--os{grid-template-areas:"text" "stack" "detail";row-gap:8px}
+  .stack{--gap:34px;width:min(58vw,250px);transform:rotateX(58deg) rotateZ(-40deg) translateZ(-70px)}
+  .stack-wrap{height:auto;min-height:370px}
+  .split--os .layer-detail{margin-top:0}
+  .readout{min-height:2.4em;margin-top:18px}
+  .steps{gap:6px}
+  .steps li{padding:5px 10px;font-size:13px}
+  .tally{gap:16px;font-size:16px}
+}
+@media (max-width:640px){
+  .wheel{display:none}
+  .wheel-list,.wheel-note{display:block}
+}
+@media (pointer:coarse){
+  .stage canvas{touch-action:pan-y}
+}
+@media (prefers-reduced-motion:reduce){
+  .slide,.slide.is-past{transform:none !important;transition:opacity .2s linear,visibility 0s linear .2s}
+  .slide.is-active{transition:opacity .2s linear}
+  .flip-inner,.plate,.progress span{transition:none}
+}
+</style>
+</head>
+<body>
+
+<svg class="ridge" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
+  <path d="M0 320 L0 206 L118 150 L206 188 L330 92 L418 158 L520 118 L640 198 L762 108 L860 168 L982 58 L1090 150 L1182 118 L1300 186 L1440 136 L1440 320 Z" fill="#17243D"/>
+  <path d="M0 320 L0 252 L160 204 L262 240 L402 172 L540 232 L700 182 L822 240 L962 190 L1102 250 L1242 202 L1440 242 L1440 320 Z" fill="#1A2944"/>
+</svg>
+
+<main class="deck" id="deck" aria-label="ZeroTrail presentation">
+
+  <!-- 1 -->
+  <section class="slide" aria-label="Slide 1 of 10: Title">
+    <div class="inner split">
+      <div>
+        <p class="wordmark">ZeroTrail <i aria-hidden="true"><b style="background:var(--moss)"></b><b style="background:var(--ice)"></b><b style="background:var(--other)"></b></i></p>
+        <h1 class="display">Waste that sorts itself.</h1>
+        <p class="lede">A smart bin that separates wet, dry and other on its own, and an operating system that tracks every kilo after that.</p>
+        <div class="cta-row">
+          <button class="btn btn-primary" data-go="3">Watch it sort</button>
+          <button class="btn" data-go="5">See the OS</button>
+        </div>
+      </div>
+      <div class="stage" data-stage="hero"><p class="stage-hint">Drag to turn it</p></div>
+    </div>
+  </section>
+
+  <!-- 2 -->
+  <section class="slide" aria-label="Slide 2 of 10: The problem">
+    <div class="inner">
+      <div class="split split--even" style="align-items:start">
+        <h2>People don't sort. Now the law says they must.</h2>
+        <ul class="facts">
+          <li><strong>Mixed waste loses its value.</strong>Once food scraps touch paper and plastic, recyclers pay less for them or turn them away, and more of it gets dumped.</li>
+          <li><strong>Four streams are now mandatory.</strong>Since 1 April 2026, every waste generator in India has to separate wet, dry, sanitary and special care waste.</li>
+          <li><strong>Big generators need proof.</strong>Large buildings and campuses above the bulk threshold must register on a central portal and file annual returns.</li>
+          <li><strong>Nobody wants to do it by hand.</strong>In apartments, offices, schools and public spaces, people simply won't sort their own waste.</li>
+        </ul>
+      </div>
+      <p class="source">Source: Solid Waste Management Rules, 2026.</p>
+    </div>
+  </section>
+
+  <!-- 3 -->
+  <section class="slide" aria-label="Slide 3 of 10: Live demo">
+    <div class="inner split split--demo">
+      <div class="demo-panel">
+        <h2>Drop anything. It sorts in about four seconds.</h2>
+        <div class="drop-row" role="group" aria-label="Drop an item into the bin">
+          <button class="btn btn-primary" data-drop="wet">Drop a banana peel</button>
+          <button class="btn btn-primary" data-drop="dry">Drop a plastic bottle</button>
+          <button class="btn btn-primary" data-drop="other">Drop something unclear</button>
+        </div>
+        <p class="readout" id="readout" role="status" aria-live="polite">Pick something to drop in.</p>
+        <ol class="steps" id="steps" aria-label="Sorting steps">
+          <li data-step="detect">Detect</li>
+          <li data-step="see">See</li>
+          <li data-step="decide">Decide</li>
+          <li data-step="slide">Slide</li>
+          <li data-step="ready">Ready</li>
+        </ol>
+        <div class="tally" aria-label="Items sorted so far">
+          <span><i class="sw sw-wet"></i>Wet <b id="c-wet">0</b></span>
+          <span><i class="sw sw-dry"></i>Dry <b id="c-dry">0</b></span>
+          <span><i class="sw sw-other"></i>Other <b id="c-other">0</b></span>
+        </div>
+        <div class="case-row"><button class="btn" id="caseToggle" aria-pressed="false">Close the case</button></div>
+      </div>
+      <div class="stage" data-stage="demo"><p class="stage-hint">Drag to turn it</p></div>
+    </div>
+  </section>
+
+  <!-- 4 -->
+  <section class="slide" aria-label="Slide 4 of 10: How it works">
+    <div class="inner">
+      <h2>What happens inside</h2>
+      <ol class="flow">
+        <li><span class="n">1</span><h3>Detect</h3><p>A sensor spots your hand and the lid opens. The item lands on the flap.</p></li>
+        <li><span class="n">2</span><h3>See</h3><p>Lights come on and the camera takes a photo.</p></li>
+        <li><span class="n">3</span><h3>Decide</h3><p>The model on the bin picks wet, dry or other in under a second. If it isn't sure, it picks other.</p></li>
+        <li><span class="n">4</span><h3>Slide</h3><p>The flap moves over the right bin and tilts, and the item slides in.</p></li>
+        <li><span class="n">5</span><h3>Sync</h3><p>Counts and fill levels go to ZeroTrail OS whenever there's a connection.</p></li>
+      </ol>
+      <p class="summary">It sorts with no internet, finishes each item in about four seconds, and the three bins pull out for emptying.</p>
+    </div>
+  </section>
+
+  <!-- 5 -->
+  <section class="slide" aria-label="Slide 5 of 10: ZeroTrail OS">
+    <div class="inner split split--os">
+      <div class="os-text">
+        <h2>The bin is one device. The OS runs everything around it.</h2>
+        <p class="body">Any bin, scale, sensor or phone can plug in, including hardware other companies build later. Pick a layer to see what it does.</p>
+      </div>
+      <div class="stack-wrap">
+        <div class="stack" id="stack">
+          <button tabindex="-1" aria-hidden="true" class="plate" style="--i:0" data-layer="devices" data-title="Devices" data-desc="ZeroTrail bins, weighing scales, fill sensors, truck GPS, cameras and the phones field staff already carry.">Devices</button>
+          <button tabindex="-1" aria-hidden="true" class="plate is-on" style="--i:1" data-layer="connect" data-title="Connect" data-desc="An open device API. Our bins plug in first, and other companies' bins, scales, sensors and GPS trackers can plug in the same way.">Connect</button>
+          <button tabindex="-1" aria-hidden="true" class="plate" style="--i:2" data-layer="record" data-title="Record" data-desc="Every deposit, pickup, weight and handover is stored with proof: a photo, a weight, a location and a time. Nothing gets edited after the fact.">Record</button>
+          <button tabindex="-1" aria-hidden="true" class="plate" style="--i:3" data-layer="ai" data-title="AI" data-desc="Recognises waste in photos, reads voice notes in Hindi, forecasts volumes by season, flags pickups that don't add up, and drafts the reports.">AI</button>
+          <button tabindex="-1" aria-hidden="true" class="plate" style="--i:4" data-layer="apps" data-title="Apps" data-desc="Screens and WhatsApp flows for bulk generators, municipal bodies, collectors, recyclers and brands, each seeing the part that matters to them.">Apps</button>
+        </div>
+      </div>
+      <div class="layer-detail">
+        <div class="layer-chips" role="group" aria-label="OS layers">
+          <button class="chip" data-layer="devices" aria-pressed="false">Devices</button>
+          <button class="chip" data-layer="connect" aria-pressed="true">Connect</button>
+          <button class="chip" data-layer="record" aria-pressed="false">Record</button>
+          <button class="chip" data-layer="ai" aria-pressed="false">AI</button>
+          <button class="chip" data-layer="apps" aria-pressed="false">Apps</button>
+        </div>
+        <div aria-live="polite">
+          <h3 id="layerTitle">Connect</h3>
+          <p id="layerDesc">An open device API. Our bins plug in first, and other companies' bins, scales, sensors and GPS trackers can plug in the same way.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- 6 -->
+  <section class="slide" aria-label="Slide 6 of 10: Business model">
+    <div class="inner">
+      <h2>Three ways ZeroTrail earns</h2>
+      <p class="lede" style="margin-top:0">Hardware gets us into buildings. Software keeps us there. Data grows with every bin we place.</p>
+      <div class="plans">
+        <button class="flip plan-haas" aria-pressed="false">
+          <span class="flip-inner">
+            <span class="face face-front">
+              <span class="plan-tag">HaaS</span>
+              <h3>Hardware as a service</h3>
+              <p>Smart bins on a monthly plan. Installation, servicing and repairs included, so there's no upfront cost.</p>
+            </span>
+            <span class="face face-back">
+              <h3>Who pays</h3>
+              <p>Apartments, offices, schools and public spaces.</p>
+              <h3>Pricing</h3>
+              <p class="tbd">[₹ per bin per month]</p>
+            </span>
+          </span>
+        </button>
+        <button class="flip plan-saas" aria-pressed="false">
+          <span class="flip-inner">
+            <span class="face face-front">
+              <span class="plan-tag">SaaS</span>
+              <h3>Software as a service</h3>
+              <p>ZeroTrail OS for compliance reports, collection tracking, dashboards and the WhatsApp assistant.</p>
+            </span>
+            <span class="face face-back">
+              <h3>Who pays</h3>
+              <p>Bulk generators, municipal bodies, collectors and recyclers.</p>
+              <h3>Pricing</h3>
+              <p class="tbd">[₹ per site per month]</p>
+            </span>
+          </span>
+        </button>
+        <button class="flip plan-daas" aria-pressed="false">
+          <span class="flip-inner">
+            <span class="face face-front">
+              <span class="plan-tag">DaaS</span>
+              <h3>Data as a service</h3>
+              <p>Verified, item-level data on what gets thrown away, where, and where it goes next.</p>
+            </span>
+            <span class="face face-back">
+              <h3>Who pays</h3>
+              <p>Brands meeting EPR targets, cities planning services, and recyclers sourcing material.</p>
+              <h3>Pricing</h3>
+              <p class="tbd">[per report or per tonne]</p>
+            </span>
+          </span>
+        </button>
+      </div>
+      <p class="hint">Tap a panel to see who pays.</p>
+    </div>
+  </section>
+
+  <!-- 7 -->
+  <section class="slide" aria-label="Slide 7 of 10: Flywheel">
+    <div class="inner split">
+      <div>
+        <h2>Every bin makes the next one smarter.</h2>
+        <p class="body">Each bin sends back labelled photos of real Indian waste. Those photos train a sharper model, sharper sorting produces cleaner data, and clean data wins the next customer.</p>
+      </div>
+      <svg class="wheel" viewBox="-90 -30 700 580" role="img" aria-label="A loop: more bins in buildings, more labelled photos, sharper sorting model, cleaner verified data, more customers, and back to more bins.">
+        <defs>
+          <marker id="ah" viewBox="0 0 10 10" refX="7" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+            <path d="M1 1 L8 5 L1 9" fill="none" stroke="#F2A65A" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
+          </marker>
+        </defs>
+        <circle cx="260" cy="260" r="190" fill="none" stroke="#34486B" stroke-width="1.5"/>
+        <g fill="none" stroke="#F2A65A" stroke-width="2.5" marker-end="url(#ah)">
+          <path d="M299.5 74.2 A190 190 0 0 1 424.5 165"/>
+          <path d="M449 240.1 A190 190 0 0 1 401.2 387.1"/>
+          <path d="M337.3 433.6 A190 190 0 0 1 182.7 433.6"/>
+          <path d="M118.8 387.1 A190 190 0 0 1 71 240.1"/>
+          <path d="M95.5 165 A190 190 0 0 1 220.5 74.2"/>
+        </g>
+        <g fill="#F2A65A">
+          <circle cx="260" cy="70" r="9"/><circle cx="440.7" cy="201.3" r="9"/><circle cx="371.7" cy="413.7" r="9"/><circle cx="148.3" cy="413.7" r="9"/><circle cx="79.3" cy="201.3" r="9"/>
+        </g>
+        <g fill="#EEF1EC" font-family="Bricolage Grotesque, Avenir Next, sans-serif" font-size="19" font-weight="650">
+          <text x="260" y="38" text-anchor="middle">More bins in buildings</text>
+          <text x="462" y="194" text-anchor="start"><tspan x="462" dy="0">More labelled</tspan><tspan x="462" dy="23">photos</tspan></text>
+          <text x="386" y="452" text-anchor="start"><tspan x="386" dy="0">Sharper sorting</tspan><tspan x="386" dy="23">model</tspan></text>
+          <text x="134" y="452" text-anchor="end"><tspan x="134" dy="0">Cleaner,</tspan><tspan x="134" dy="23">verified data</tspan></text>
+          <text x="58" y="194" text-anchor="end"><tspan x="58" dy="0">More</tspan><tspan x="58" dy="23">customers</tspan></text>
+        </g>
+        <g text-anchor="middle" font-family="Bricolage Grotesque, Avenir Next, sans-serif">
+          <text x="260" y="244" fill="#AEB6C1" font-size="18">Each turn grows</text>
+          <text x="260" y="276" fill="#EEF1EC" font-size="26" font-weight="760">HaaS, SaaS and DaaS</text>
+          <text x="260" y="304" fill="#AEB6C1" font-size="18">together</text>
+        </g>
+      </svg>
+      <div>
+        <ol class="wheel-list">
+          <li>More bins in buildings</li>
+          <li>More labelled photos</li>
+          <li>A sharper sorting model</li>
+          <li>Cleaner, verified data</li>
+          <li>More customers, and back to more bins</li>
+        </ol>
+        <p class="wheel-note">Each turn grows HaaS, SaaS and DaaS together.</p>
+      </div>
+    </div>
+  </section>
+
+  <!-- 8 -->
+  <section class="slide" aria-label="Slide 8 of 10: Why now">
+    <div class="inner">
+      <h2>Why now, and why Ladakh first</h2>
+      <div class="reasons">
+        <div><h3>The rules changed</h3><p>Since April 2026, every generator must separate four streams, and bulk generators must register and file annual returns on a central portal.</p></div>
+        <div><h3>Trust broke</h3><p>Regulators found about 700,000 fake plastic recycling certificates. Brands now need data they can actually defend.</p></div>
+        <div><h3>AI got small</h3><p>A sorting model can now run on affordable hardware inside the bin itself, with no internet connection.</p></div>
+      </div>
+      <p class="ladakh">Fragile mountain regions feel the waste problem first and hardest. If the system works in Ladakh, it can work anywhere.</p>
+      <p class="source">Sources: Solid Waste Management Rules, 2026. Centre for Science and Environment analysis of CPCB findings, 2024.</p>
+    </div>
+  </section>
+
+  <!-- 9 -->
+  <section class="slide" aria-label="Slide 9 of 10: Roadmap">
+    <div class="inner">
+      <h2>Where we're going</h2>
+      <ol class="road">
+        <li><h3>Now</h3><p>A working prototype bin, and ZeroTrail OS running our own collection work in Ladakh.</p></li>
+        <li><h3>Next</h3><p>Pilots in apartments, offices and schools. Compliance reports for bulk generators.</p></li>
+        <li><h3>Later</h3><p>An open device API for other companies' hardware, municipal dashboards, and data products for brands.</p></li>
+      </ol>
+    </div>
+  </section>
+
+  <!-- 10 -->
+  <section class="slide" aria-label="Slide 10 of 10: Close">
+    <div class="inner">
+      <p class="wordmark">ZeroTrail <i aria-hidden="true"><b style="background:var(--moss)"></b><b style="background:var(--ice)"></b><b style="background:var(--other)"></b></i></p>
+      <h1 class="display">Waste that sorts itself.</h1>
+      <p class="lede">Scalable recycling for fragile regions, starting in Ladakh and built for India and beyond.</p>
+      <div class="contact"><span>[your email]</span><span>[your phone]</span><span>[your website]</span></div>
+      <div class="cta-row">
+        <button class="btn btn-primary" data-go="3">Replay the demo</button>
+        <button class="btn" data-go="1">Back to the start</button>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<nav class="controls" aria-label="Slide controls">
+  <span class="brand">ZeroTrail</span>
+  <div class="nav">
+    <button class="icon-btn" id="prev" aria-label="Previous slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 5l-7 7 7 7"/></svg></button>
+    <span class="counter" id="counter" aria-live="polite">1 / 10</span>
+    <button class="icon-btn" id="next" aria-label="Next slide"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 5l7 7-7 7"/></svg></button>
+    <button class="icon-btn" id="fs" aria-label="Toggle full screen"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 9V4h5M20 9V4h-5M4 15v5h5M20 15v5h-5"/></svg></button>
+  </div>
+</nav>
+<div class="progress" aria-hidden="true"><span id="bar"></span></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+(function () {
+  "use strict";
+  var reduceMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  /* ---------------- 3D bin ---------------- */
+  var Bin = (function () {
+    var api = { mount: function () {}, drop: function () {}, setOpen: function () {}, isBusy: function () { return false; } };
+    var T = window.THREE;
+    var renderer = null;
+    if (T) { try { renderer = new T.WebGLRenderer({ antialias: true, alpha: true }); } catch (e) { renderer = null; } }
+    if (!renderer) {
+      api.mount = function (el) {
+        if (el && !el.querySelector(".nogl")) {
+          var d = document.createElement("p");
+          d.className = "nogl";
+          d.textContent = "The 3D view needs WebGL. Try a recent version of Chrome, Safari or Firefox.";
+          el.appendChild(d);
+        }
+      };
+      return api;
+    }
+
+    var canvas = renderer.domElement;
+    canvas.setAttribute("role", "img");
+    canvas.setAttribute("aria-label", "3D model of the ZeroTrail smart bin. Drag to turn it.");
+    renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+
+    var scene = new T.Scene();
+    var camera = new T.PerspectiveCamera(32, 1, 0.1, 100);
+    var targetV = new T.Vector3(0, 1.3, 0);
+    var view = { r: 8.4, theta: 0.62, phi: 1.1 };
+    var presets = { hero: { r: 8.6, theta: 0.62, phi: 1.1 }, demo: { r: 7.6, theta: 0.42, phi: 1.14 } };
+    var aspectBoost = 1;
+
+    scene.add(new T.HemisphereLight(0xE3ECFF, 0x1A2438, 0.95));
+    var key = new T.DirectionalLight(0xFFFFFF, 0.85); key.position.set(4, 7, 6); scene.add(key);
+    var fill = new T.DirectionalLight(0x9CC3FF, 0.35); fill.position.set(-6, 3, -3); scene.add(fill);
+    var flash = new T.PointLight(0xFFF1D6, 0, 4); flash.position.set(0.5, 2.1, 0.3); scene.add(flash);
+
+    var W = 3.0, H = 2.4, D = 1.4;
+    var shellMat = new T.MeshStandardMaterial({ color: 0xE6ECF2, roughness: 0.3, metalness: 0.05, transparent: true, opacity: 0.12, side: T.DoubleSide, depthWrite: false });
+    var darkMat = new T.MeshStandardMaterial({ color: 0x2A3446, roughness: 0.6, metalness: 0.3 });
+    var metalMat = new T.MeshStandardMaterial({ color: 0x8C97A8, roughness: 0.35, metalness: 0.7 });
+    var apricotMat = new T.MeshStandardMaterial({ color: 0xF2A65A, roughness: 0.45, metalness: 0.1 });
+    var apricotDark = new T.MeshStandardMaterial({ color: 0xD98A3E, roughness: 0.5, metalness: 0.1 });
+    var sensorMat = new T.MeshStandardMaterial({ color: 0x2F6FE0, emissive: 0x3B82F6, emissiveIntensity: 0.5 });
+    var lightMat = new T.MeshStandardMaterial({ color: 0xFFFFFF, emissive: 0xFFF4DE, emissiveIntensity: 0.25 });
+    var dividerMat = new T.MeshStandardMaterial({ color: 0xC6D2E0, transparent: true, opacity: 0.28, depthWrite: false, side: T.DoubleSide });
+    var edgeMat = new T.LineBasicMaterial({ color: 0xA9BCD4, transparent: true, opacity: 0.85 });
+
+    function box(w, h, d, mat, x, y, z, parent) {
+      var m = new T.Mesh(new T.BoxGeometry(w, h, d), mat);
+      m.position.set(x, y, z);
+      (parent || scene).add(m);
+      return m;
+    }
+    function edges(w, h, d, x, y, z, mat) {
+      var l = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(w, h, d)), mat || edgeMat);
+      l.position.set(x, y, z);
+      scene.add(l);
+      return l;
+    }
+
+    var redrawers = [];
+    function textTexture(w, h, draw) {
+      var c = document.createElement("canvas"); c.width = w; c.height = h;
+      var ctx = c.getContext("2d");
+      var tex = new T.CanvasTexture(c);
+      function redraw() { ctx.clearRect(0, 0, w, h); draw(ctx, w, h); tex.needsUpdate = true; }
+      redraw(); redrawers.push(redraw);
+      return tex;
+    }
+    var FONT = '"Bricolage Grotesque", "Avenir Next", "Segoe UI", sans-serif';
+
+    // plinth and shadow
+    box(W + 0.1, 0.08, D + 0.1, darkMat, 0, -0.04, 0);
+    var shadowTex = textTexture(256, 256, function (ctx, w, h) {
+      var g = ctx.createRadialGradient(w / 2, h / 2, 10, w / 2, h / 2, w / 2);
+      g.addColorStop(0, "rgba(5,10,20,0.55)"); g.addColorStop(1, "rgba(5,10,20,0)");
+      ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+    });
+    var shadow = new T.Mesh(new T.CircleGeometry(2.4, 48), new T.MeshBasicMaterial({ map: shadowTex, transparent: true, depthWrite: false }));
+    shadow.rotation.x = -Math.PI / 2; shadow.scale.set(1.3, 0.9, 1); shadow.position.y = -0.085; scene.add(shadow);
+
+    // shell panels (top has the inlet opening)
+    var IW = 0.9, ID = 0.8;
+    box(W, H, 0.03, shellMat, 0, H / 2, -D / 2);
+    box(W, H, 0.03, shellMat, 0, H / 2, D / 2);
+    box(0.03, H, D, shellMat, -W / 2, H / 2, 0);
+    box(0.03, H, D, shellMat, W / 2, H / 2, 0);
+    var sideW = (W - IW) / 2;
+    box(sideW, 0.03, D, shellMat, -(IW / 2 + sideW / 2), H, 0);
+    box(sideW, 0.03, D, shellMat, (IW / 2 + sideW / 2), H, 0);
+    var stripD = (D - ID) / 2;
+    box(IW, 0.03, stripD, shellMat, 0, H, ID / 2 + stripD / 2);
+    box(IW, 0.03, stripD, shellMat, 0, H, -(ID / 2 + stripD / 2));
+    edges(W, H, D, 0, H / 2, 0);
+
+    // inlet hood and lid
+    var HH = 0.3;
+    box(IW, HH, 0.03, shellMat, 0, H + HH / 2, ID / 2);
+    box(IW, HH, 0.03, shellMat, 0, H + HH / 2, -ID / 2);
+    box(0.03, HH, ID, shellMat, -IW / 2, H + HH / 2, 0);
+    box(0.03, HH, ID, shellMat, IW / 2, H + HH / 2, 0);
+    edges(IW, HH, ID, 0, H + HH / 2, 0);
+    var lidPivot = new T.Group(); lidPivot.position.set(0, H + HH, -ID / 2); scene.add(lidPivot);
+    box(IW - 0.02, 0.035, ID, apricotMat, 0, 0, ID / 2, lidPivot);
+    box(0.08, 0.05, 0.02, sensorMat, 0.28, H + 0.2, ID / 2 - 0.02);
+
+    // front badge, shown when the case is closed
+    var badgeTex = textTexture(1024, 320, function (ctx, w, h) {
+      ctx.fillStyle = "#142036";
+      ctx.font = "800 150px " + FONT;
+      ctx.textBaseline = "middle";
+      ctx.fillText("ZeroTrail", 40, h / 2 + 8);
+      var cols = ["#86B86B", "#86C3E8", "#C9BFAE"];
+      for (var i = 0; i < 3; i++) { ctx.fillStyle = cols[i]; ctx.fillRect(w - 250 + i * 76, h / 2 - 28, 56, 56); }
+    });
+    var badge = new T.Mesh(new T.PlaneGeometry(1.25, 0.39), new T.MeshBasicMaterial({ map: badgeTex, transparent: true }));
+    badge.position.set(0, 1.95, D / 2 + 0.025); scene.add(badge);
+
+    // door outline and handle (right side)
+    edges(0.01, 1.25, 1.2, W / 2 + 0.02, 0.66, 0, new T.LineBasicMaterial({ color: 0xF2A65A, transparent: true, opacity: 0.55 }));
+    box(0.04, 0.26, 0.05, darkMat, W / 2 + 0.04, 0.8, 0.45);
+
+    // electronics bay, camera, lights
+    box(0.9, 0.22, 0.5, darkMat, -0.95, H - 0.16, -0.38);
+    box(0.05, 0.05, 0.02, sensorMat, -0.62, H - 0.16, -0.12);
+    var cam = new T.Group(); cam.position.set(-1.36, 2.0, 0.05); cam.rotation.z = -0.55; scene.add(cam);
+    box(0.14, 0.17, 0.22, darkMat, 0, 0, 0, cam);
+    var lens = new T.Mesh(new T.CylinderGeometry(0.055, 0.055, 0.07, 20), sensorMat);
+    lens.rotation.z = -Math.PI / 2; lens.position.x = 0.09; cam.add(lens);
+    box(0.9, 0.03, 0.14, lightMat, 0.85, H - 0.05, 0.1);
+
+    // rail, belt, motor, home sensor
+    box(2.7, 0.06, 0.06, metalMat, 0, 1.8, -0.6);
+    box(2.6, 0.015, 0.015, apricotMat, 0, 1.745, -0.6);
+    box(0.2, 0.22, 0.2, darkMat, 1.36, 1.8, -0.58);
+    box(0.06, 0.08, 0.05, sensorMat, -1.37, 1.8, -0.6);
+
+    // bins and dividers
+    var binX = [-1.0, 0, 1.0];
+    var binCols = [0x86B86B, 0x86C3E8, 0xC9BFAE];
+    var binNames = ["Wet", "Dry", "Other"];
+    var hidden = new T.MeshBasicMaterial({ visible: false });
+    binX.forEach(function (x, i) {
+      var m = new T.MeshStandardMaterial({ color: binCols[i], roughness: 0.6, side: T.DoubleSide });
+      var bin = new T.Mesh(new T.BoxGeometry(0.86, 1.05, 1.15), [m, m, hidden, m, m, m]);
+      bin.position.set(x, 0.53, 0); scene.add(bin);
+      var rim = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(0.86, 1.05, 1.15)), new T.LineBasicMaterial({ color: new T.Color(binCols[i]).multiplyScalar(0.55) }));
+      rim.position.copy(bin.position); scene.add(rim);
+      var name = binNames[i];
+      var tex = textTexture(512, 160, function (ctx, w, h) {
+        ctx.fillStyle = "#142036"; ctx.font = "700 104px " + FONT;
+        ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(name, w / 2, h / 2 + 6);
+      });
+      var lab = new T.Mesh(new T.PlaneGeometry(0.56, 0.175), new T.MeshBasicMaterial({ map: tex, transparent: true }));
+      lab.position.set(x, 0.74, 0.578); scene.add(lab);
+    });
+    box(0.02, 1.45, 1.3, dividerMat, -0.5, 0.725, 0);
+    box(0.02, 1.45, 1.3, dividerMat, 0.5, 0.725, 0);
+
+    // shuttle: carriage on the rail, flap on a hinge along its back edge
+    var shuttle = new T.Group(); scene.add(shuttle);
+    box(0.28, 0.15, 0.12, apricotMat, 0, 1.8, -0.55, shuttle);
+    box(0.03, 0.14, 0.03, metalMat, -0.09, 1.7, -0.5, shuttle);
+    box(0.03, 0.14, 0.03, metalMat, 0.09, 1.7, -0.5, shuttle);
+    var pivot = new T.Group(); pivot.position.set(0, 1.62, -0.46); shuttle.add(pivot);
+    box(0.8, 0.035, 0.92, apricotMat, 0, 0, 0.46, pivot);
+    box(0.03, 0.09, 0.92, apricotDark, -0.4, 0.045, 0.46, pivot);
+    box(0.03, 0.09, 0.92, apricotDark, 0.4, 0.045, 0.46, pivot);
+    box(0.8, 0.09, 0.03, apricotDark, 0, 0.045, 0.015, pivot);
+
+    // camera view lines, shown during capture
+    var coneGeo = new T.BufferGeometry();
+    var lp = [-1.27, 1.95, 0.05];
+    var corners = [[-0.4, 1.64, -0.46], [0.4, 1.64, -0.46], [0.4, 1.64, 0.46], [-0.4, 1.64, 0.46]];
+    var pts = [];
+    corners.forEach(function (c) { pts.push(lp[0], lp[1], lp[2], c[0], c[1], c[2]); });
+    coneGeo.setAttribute("position", new T.Float32BufferAttribute(pts, 3));
+    var cone = new T.LineSegments(coneGeo, new T.LineBasicMaterial({ color: 0x5B9BFF, transparent: true, opacity: 0.8 }));
+    cone.visible = false; scene.add(cone);
+
+    function redrawAll() { redrawers.forEach(function (f) { f(); }); }
+    if (document.fonts && document.fonts.ready) { document.fonts.ready.then(redrawAll); }
+
+    // ------- open / closed case -------
+    var mode = null, demoOpen = true;
+    function applyOpen(open) {
+      shellMat.opacity = open ? 0.12 : 0.97;
+      shellMat.depthWrite = !open;
+      shellMat.needsUpdate = true;
+      badge.visible = !open;
+    }
+    applyOpen(false);
+
+    // ------- tweens -------
+    var tweens = [];
+    function easeInOut(t) { return t < 0.5 ? 2 * t * t : 1 - Math.pow(-2 * t + 2, 2) / 2; }
+    function easeIn(t) { return t * t; }
+    function tween(ms, fn, ease) {
+      ease = ease || easeInOut;
+      return new Promise(function (res) { tweens.push({ s: performance.now(), ms: ms, fn: fn, ease: ease, res: res }); });
+    }
+    function wait(ms) { return tween(ms, function () {}); }
+    function runTweens(now) {
+      for (var i = tweens.length - 1; i >= 0; i--) {
+        var tw = tweens[i];
+        var t = Math.min(1, (now - tw.s) / tw.ms);
+        tw.fn(tw.ease(t));
+        if (t >= 1) { tweens.splice(i, 1); tw.res(); }
+      }
+    }
+
+    // ------- items -------
+    function makeItem(kind) {
+      var g = new T.Group(), hh;
+      if (kind === "wet") {
+        var peel = new T.Mesh(new T.TorusGeometry(0.15, 0.045, 10, 28, Math.PI * 1.15), new T.MeshStandardMaterial({ color: 0xE8C547, roughness: 0.65 }));
+        peel.rotation.x = Math.PI / 2; g.add(peel);
+        var tip = new T.Mesh(new T.SphereGeometry(0.035, 10, 8), new T.MeshStandardMaterial({ color: 0x5B4424 }));
+        tip.position.set(0.15, 0, 0); g.add(tip);
+        hh = 0.045;
+      } else if (kind === "dry") {
+        var b = new T.Group();
+        b.add(new T.Mesh(new T.CylinderGeometry(0.075, 0.075, 0.3, 20), new T.MeshStandardMaterial({ color: 0xBFE3F5, transparent: true, opacity: 0.8, roughness: 0.15 })));
+        var band = new T.Mesh(new T.CylinderGeometry(0.077, 0.077, 0.1, 20), new T.MeshStandardMaterial({ color: 0x3B6FB6, roughness: 0.5 }));
+        band.position.y = -0.02; b.add(band);
+        var neck = new T.Mesh(new T.CylinderGeometry(0.035, 0.06, 0.07, 16), new T.MeshStandardMaterial({ color: 0xBFE3F5, transparent: true, opacity: 0.8 }));
+        neck.position.y = 0.185; b.add(neck);
+        var capM = new T.Mesh(new T.CylinderGeometry(0.038, 0.038, 0.035, 16), new T.MeshStandardMaterial({ color: 0x2E7DD1 }));
+        capM.position.y = 0.235; b.add(capM);
+        b.rotation.z = Math.PI / 2; g.add(b);
+        hh = 0.075;
+      } else {
+        var a = new T.Mesh(new T.IcosahedronGeometry(0.12, 0), new T.MeshStandardMaterial({ color: 0xD8CCBA, roughness: 0.9, flatShading: true }));
+        var c = new T.Mesh(new T.IcosahedronGeometry(0.07, 0), new T.MeshStandardMaterial({ color: 0xB9A98F, roughness: 0.9, flatShading: true }));
+        c.position.set(0.09, 0.03, 0.05); g.add(a); g.add(c);
+        hh = 0.11;
+      }
+      g.userData.hh = hh;
+      return g;
+    }
+    function dispose(obj) {
+      obj.traverse(function (o) { if (o.geometry) o.geometry.dispose(); if (o.material) o.material.dispose(); });
+    }
+
+    // ------- drop sequence -------
+    var busy = false;
+    var binItems = [[], [], []];
+    var kindIndex = { wet: 0, dry: 1, other: 2 };
+    var ui = { say: function () {}, step: function () {}, busy: function () {}, done: function () {} };
+
+    async function drop(kind) {
+      if (busy) return;
+      busy = true; ui.busy(true);
+      var t0 = performance.now();
+      if (mode === "demo" && !demoOpen) { demoOpen = true; applyOpen(true); ui.caseChanged(true); }
+
+      ui.step("detect"); ui.say("Something is coming in.");
+      sensorMat.emissiveIntensity = 2.4;
+      var item = makeItem(kind), hh = item.userData.hh;
+      var startY = H + 1.0;
+      item.position.set(0, startY, 0);
+      item.rotation.set(Math.random() * 0.8, Math.random() * 3, Math.random() * 0.8);
+      scene.add(item);
+      await tween(340, function (t) { lidPivot.rotation.x = -1.15 * t; });
+      var yLand = 1.62 + 0.0175 + hh;
+      var rx = item.rotation.x, rz = item.rotation.z;
+      await tween(520, function (t) {
+        item.position.y = startY + (yLand - startY) * t;
+        item.rotation.x = rx * (1 - t); item.rotation.z = rz * (1 - t);
+      }, easeIn);
+      sensorMat.emissiveIntensity = 0.5;
+      pivot.attach(item);
+      tween(300, function (t) { lidPivot.rotation.x = -1.15 * (1 - t); });
+
+      ui.step("see"); ui.say("Taking a photo.");
+      cone.visible = true;
+      await tween(420, function (t) {
+        var k = Math.sin(t * Math.PI);
+        lightMat.emissiveIntensity = 0.25 + 2.2 * k;
+        flash.intensity = 2.6 * k;
+      });
+      cone.visible = false;
+
+      ui.step("decide");
+      var idx = kindIndex[kind];
+      var pct = kind === "other" ? Math.round(52 + Math.random() * 10) : Math.round(91 + Math.random() * 7);
+      ui.say(kind === "other" ? ("Not sure (" + pct + "%), so it goes to Other.") : (binNames[idx] + ", " + pct + "% sure."));
+      await wait(430);
+
+      ui.step("slide");
+      var tx = binX[idx];
+      if (tx !== 0) { await tween(600, function (t) { shuttle.position.x = tx * t; }); } else { await wait(120); }
+      await tween(320, function (t) { pivot.rotation.x = 0.62 * t; });
+      var z0 = item.position.z;
+      await tween(360, function (t) { item.position.z = z0 + (1.04 - z0) * t; }, easeIn);
+      scene.attach(item);
+      var stackH = Math.min(0.5, binItems[idx].length * 0.06);
+      var target = new T.Vector3(tx + (Math.random() - 0.5) * 0.3, 0.06 + hh + stackH, (Math.random() - 0.5) * 0.5);
+      var p0 = item.position.clone();
+      var r0 = item.rotation.clone();
+      var spin = (Math.random() - 0.5) * 2;
+      await tween(460, function (t) {
+        item.position.lerpVectors(p0, target, t);
+        item.rotation.x = r0.x * (1 - t); item.rotation.y = r0.y + spin * t; item.rotation.z = r0.z * (1 - t);
+      }, easeIn);
+      binItems[idx].push(item);
+      if (binItems[idx].length > 7) { var old = binItems[idx].shift(); scene.remove(old); dispose(old); }
+      ui.done(kind);
+
+      ui.step("ready");
+      await Promise.all([
+        tween(300, function (t) { pivot.rotation.x = 0.62 * (1 - t); }),
+        tx !== 0 ? tween(600, function (t) { shuttle.position.x = tx * (1 - t); }) : wait(1)
+      ]);
+      var secs = ((performance.now() - t0) / 1000).toFixed(1);
+      ui.say("Sorted into " + binNames[idx] + " in " + secs + " seconds. Try another.");
+      ui.step(null);
+      busy = false; ui.busy(false);
+    }
+
+    // ------- camera and drag -------
+    var drag = { on: false, x: 0, y: 0 };
+    canvas.addEventListener("pointerdown", function (e) { drag.on = true; drag.x = e.clientX; drag.y = e.clientY; try { canvas.setPointerCapture(e.pointerId); } catch (err) {} });
+    canvas.addEventListener("pointermove", function (e) {
+      if (!drag.on) return;
+      view.theta -= (e.clientX - drag.x) * 0.008;
+      view.phi = Math.max(0.6, Math.min(1.45, view.phi - (e.clientY - drag.y) * 0.006));
+      drag.x = e.clientX; drag.y = e.clientY;
+    });
+    function endDrag() { drag.on = false; }
+    canvas.addEventListener("pointerup", endDrag);
+    canvas.addEventListener("pointercancel", endDrag);
+
+    function placeCamera() {
+      var r = view.r * aspectBoost;
+      camera.position.set(
+        targetV.x + r * Math.sin(view.phi) * Math.sin(view.theta),
+        targetV.y + r * Math.cos(view.phi),
+        targetV.z + r * Math.sin(view.phi) * Math.cos(view.theta)
+      );
+      camera.lookAt(targetV);
+    }
+
+    var current = null, running = false;
+    function resize() {
+      if (!current) return;
+      var w = current.clientWidth || 1, h = current.clientHeight || 1;
+      renderer.setSize(w, h, false);
+      camera.aspect = w / h;
+      aspectBoost = camera.aspect < 1 ? 1.45 : (camera.aspect < 1.3 ? 1.15 : 1);
+      if (w < 520) aspectBoost *= (mode === "demo" ? 0.84 : 0.92);
+      camera.updateProjectionMatrix();
+    }
+    var ro = window.ResizeObserver ? new ResizeObserver(function () { resize(); }) : null;
+    window.addEventListener("resize", resize);
+
+    function loop(now) {
+      if (!running) return;
+      requestAnimationFrame(loop);
+      runTweens(now || performance.now());
+      if (document.hidden) return;
+      if (mode === "hero" && !drag.on && !reduceMotion) view.theta += 0.0025;
+      placeCamera();
+      renderer.render(scene, camera);
+    }
+
+    api.mount = function (el, m) {
+      if (!el) { running = false; current = null; return; }
+      mode = m;
+      if (canvas.parentNode !== el) el.appendChild(canvas);
+      if (ro) { if (current) ro.unobserve(current); ro.observe(el); }
+      current = el;
+      var p = presets[m] || presets.hero;
+      view.r = p.r; view.theta = p.theta; view.phi = p.phi;
+      applyOpen(m === "demo" ? demoOpen : false);
+      resize();
+      if (!running) { running = true; requestAnimationFrame(loop); }
+    };
+    api.drop = drop;
+    api.setOpen = function (open) { demoOpen = open; if (mode === "demo") applyOpen(open); };
+    api.isOpen = function () { return demoOpen; };
+    api.isBusy = function () { return busy; };
+    api.bindUI = function (u) { ui = u; };
+    return api;
+  })();
+
+  /* ---------------- demo UI ---------------- */
+  var readout = document.getElementById("readout");
+  var stepEls = Array.prototype.slice.call(document.querySelectorAll("#steps li"));
+  var dropBtns = Array.prototype.slice.call(document.querySelectorAll("[data-drop]"));
+  var caseBtn = document.getElementById("caseToggle");
+  var counts = { wet: 0, dry: 0, other: 0 };
+  var order = ["detect", "see", "decide", "slide", "ready"];
+
+  function setCaseLabel(open) {
+    caseBtn.textContent = open ? "Close the case" : "Show inside";
+    caseBtn.setAttribute("aria-pressed", open ? "false" : "true");
+  }
+  if (Bin.bindUI) {
+    Bin.bindUI({
+      say: function (t) { readout.textContent = t; },
+      step: function (s) {
+        var at = order.indexOf(s);
+        stepEls.forEach(function (li, i) {
+          li.classList.toggle("is-now", i === at);
+          li.classList.toggle("is-done", at > -1 && i < at);
+        });
+      },
+      busy: function (b) { dropBtns.forEach(function (btn) { btn.disabled = b; }); },
+      done: function (kind) { counts[kind]++; document.getElementById("c-" + kind).textContent = counts[kind]; },
+      caseChanged: function (open) { setCaseLabel(open); }
+    });
+  }
+  var demoStage = document.querySelector('[data-stage="demo"]');
+  var narrow = window.matchMedia("(max-width: 900px)");
+  dropBtns.forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (narrow.matches && demoStage) {
+        var r = demoStage.getBoundingClientRect();
+        if (r.top < 0 || r.bottom > window.innerHeight) demoStage.scrollIntoView({ block: "start", behavior: reduceMotion ? "auto" : "smooth" });
+      }
+      Bin.drop(btn.dataset.drop);
+    });
+  });
+  caseBtn.addEventListener("click", function () {
+    var open = !(Bin.isOpen ? Bin.isOpen() : true);
+    Bin.setOpen(open);
+    setCaseLabel(open);
+  });
+
+  /* ---------------- OS layers ---------------- */
+  var plates = Array.prototype.slice.call(document.querySelectorAll(".plate"));
+  var chips = Array.prototype.slice.call(document.querySelectorAll(".chip"));
+  var layerTitle = document.getElementById("layerTitle");
+  var layerDesc = document.getElementById("layerDesc");
+  function selectLayer(key) {
+    plates.forEach(function (q) {
+      var on = q.dataset.layer === key;
+      q.classList.toggle("is-on", on);
+      if (on) { layerTitle.textContent = q.dataset.title; layerDesc.textContent = q.dataset.desc; }
+    });
+    chips.forEach(function (c) { c.setAttribute("aria-pressed", c.dataset.layer === key ? "true" : "false"); });
+  }
+  plates.forEach(function (p) { p.addEventListener("click", function () { selectLayer(p.dataset.layer); }); });
+  chips.forEach(function (c) { c.addEventListener("click", function () { selectLayer(c.dataset.layer); }); });
+
+  /* ---------------- flip panels ---------------- */
+  Array.prototype.slice.call(document.querySelectorAll(".flip")).forEach(function (f) {
+    f.addEventListener("click", function () {
+      var on = !f.classList.contains("is-flipped");
+      f.classList.toggle("is-flipped", on);
+      f.setAttribute("aria-pressed", on ? "true" : "false");
+    });
+  });
+
+  /* ---------------- deck navigation ---------------- */
+  var slides = Array.prototype.slice.call(document.querySelectorAll(".slide"));
+  var counter = document.getElementById("counter");
+  var bar = document.getElementById("bar");
+  var prevBtn = document.getElementById("prev");
+  var nextBtn = document.getElementById("next");
+  var fsBtn = document.getElementById("fs");
+  var idx = 0;
+
+  function go(n) {
+    n = Math.max(0, Math.min(slides.length - 1, n));
+    idx = n;
+    slides.forEach(function (s, i) {
+      s.classList.toggle("is-active", i === n);
+      s.classList.toggle("is-past", i < n);
+      if (i === n) { s.removeAttribute("inert"); s.setAttribute("aria-hidden", "false"); }
+      else { s.setAttribute("inert", ""); s.setAttribute("aria-hidden", "true"); }
+    });
+    counter.textContent = (n + 1) + " / " + slides.length;
+    bar.style.transform = "scaleX(" + ((n + 1) / slides.length) + ")";
+    prevBtn.disabled = n === 0;
+    nextBtn.disabled = n === slides.length - 1;
+    try { history.replaceState(null, "", "#" + (n + 1)); } catch (e) {}
+    var stage = slides[n].querySelector("[data-stage]");
+    Bin.mount(stage, stage ? stage.dataset.stage : null);
+  }
+
+  prevBtn.addEventListener("click", function () { go(idx - 1); });
+  nextBtn.addEventListener("click", function () { go(idx + 1); });
+  document.addEventListener("click", function (e) {
+    var g = e.target.closest ? e.target.closest("[data-go]") : null;
+    if (g) go(parseInt(g.dataset.go, 10) - 1);
+  });
+
+  function toggleFs() {
+    if (!document.fullscreenElement) {
+      if (document.documentElement.requestFullscreen) document.documentElement.requestFullscreen().catch(function () {});
+    } else if (document.exitFullscreen) { document.exitFullscreen(); }
+  }
+  if (!document.documentElement.requestFullscreen) { fsBtn.hidden = true; }
+  fsBtn.addEventListener("click", toggleFs);
+
+  document.addEventListener("keydown", function (e) {
+    if (e.altKey || e.ctrlKey || e.metaKey) return;
+    var tag = (e.target.tagName || "").toLowerCase();
+    if (tag === "input" || tag === "textarea") return;
+    switch (e.key) {
+      case "ArrowRight": case "PageDown": go(idx + 1); e.preventDefault(); break;
+      case "ArrowLeft": case "PageUp": go(idx - 1); e.preventDefault(); break;
+      case " ": if (tag !== "button") { go(e.shiftKey ? idx - 1 : idx + 1); e.preventDefault(); } break;
+      case "Home": go(0); e.preventDefault(); break;
+      case "End": go(slides.length - 1); e.preventDefault(); break;
+      case "f": case "F": toggleFs(); break;
+    }
+  });
+
+  var deck = document.getElementById("deck");
+  var sx = null, sy = null;
+  deck.addEventListener("touchstart", function (e) {
+    if (e.touches.length !== 1 || (e.target.closest && e.target.closest("[data-stage]"))) { sx = null; return; }
+    sx = e.touches[0].clientX; sy = e.touches[0].clientY;
+  }, { passive: true });
+  deck.addEventListener("touchend", function (e) {
+    if (sx === null) return;
+    var t = e.changedTouches[0];
+    var dx = t.clientX - sx, dy = t.clientY - sy;
+    if (Math.abs(dx) > 60 && Math.abs(dx) > Math.abs(dy) * 1.5) go(idx + (dx < 0 ? 1 : -1));
+    sx = null;
+  }, { passive: true });
+
+  var start = parseInt((location.hash || "").replace("#", ""), 10);
+  go(isNaN(start) ? 0 : start - 1);
+})();
+</script>
+</body>
+</html>
