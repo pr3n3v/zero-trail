@@ -264,7 +264,7 @@ p{margin:0}
           <li data-step="detect">Detect</li>
           <li data-step="see">See</li>
           <li data-step="decide">Decide</li>
-          <li data-step="slide">Slide</li>
+          <li data-step="tilt">Tilt</li>
           <li data-step="ready">Ready</li>
         </ol>
         <div class="tally" aria-label="Items sorted so far">
@@ -283,10 +283,10 @@ p{margin:0}
     <div class="inner">
       <h2>What happens inside</h2>
       <ol class="flow">
-        <li><span class="n">1</span><h3>Detect</h3><p>A sensor spots your hand and the lid opens. The item lands on the flap.</p></li>
+        <li><span class="n">1</span><h3>Detect</h3><p>A sensor spots your hand and the lid opens. The item lands on the platform.</p></li>
         <li><span class="n">2</span><h3>See</h3><p>Lights come on and the camera takes a photo.</p></li>
         <li><span class="n">3</span><h3>Decide</h3><p>The model on the bin picks wet, dry or other in under a second. If it isn't sure, it picks other.</p></li>
-        <li><span class="n">4</span><h3>Slide</h3><p>The flap moves over the right bin and tilts, and the item slides in.</p></li>
+        <li><span class="n">4</span><h3>Tilt</h3><p>The platform tilts 45° left or right and the item slides down a chute. For dry waste it snaps to 90° and drops it straight down.</p></li>
         <li><span class="n">5</span><h3>Sync</h3><p>Counts and fill levels go to ZeroTrail OS whenever there's a connection.</p></li>
       </ol>
       <p class="summary">It sorts with no internet, finishes each item in about four seconds, and the three bins pull out for emptying.</p>
@@ -614,17 +614,18 @@ p{margin:0}
     // electronics bay, camera, lights
     box(0.9, 0.22, 0.5, darkMat, -0.95, H - 0.16, -0.38);
     box(0.05, 0.05, 0.02, sensorMat, -0.62, H - 0.16, -0.12);
-    var cam = new T.Group(); cam.position.set(-1.36, 2.0, 0.05); cam.rotation.z = -0.55; scene.add(cam);
+    var cam = new T.Group(); cam.position.set(-1.36, 2.15, 0.05); cam.rotation.z = -0.4; scene.add(cam);
     box(0.14, 0.17, 0.22, darkMat, 0, 0, 0, cam);
     var lens = new T.Mesh(new T.CylinderGeometry(0.055, 0.055, 0.07, 20), sensorMat);
     lens.rotation.z = -Math.PI / 2; lens.position.x = 0.09; cam.add(lens);
     box(0.9, 0.03, 0.14, lightMat, 0.85, H - 0.05, 0.1);
 
-    // rail, belt, motor, home sensor
-    box(2.7, 0.06, 0.06, metalMat, 0, 1.8, -0.6);
-    box(2.6, 0.015, 0.015, apricotMat, 0, 1.745, -0.6);
-    box(0.2, 0.22, 0.2, darkMat, 1.36, 1.8, -0.58);
-    box(0.06, 0.08, 0.05, sensorMat, -1.37, 1.8, -0.6);
+    // tilt motor on the back wall, with its shaft and position sensor
+    var PY = 1.9, PW = 0.9;
+    box(0.26, 0.26, 0.16, darkMat, 0, PY, -0.6);
+    var shaft = new T.Mesh(new T.CylinderGeometry(0.03, 0.03, 0.14, 12), metalMat);
+    shaft.rotation.x = Math.PI / 2; shaft.position.set(0, PY, -0.47); scene.add(shaft);
+    box(0.06, 0.06, 0.03, sensorMat, 0.17, PY, -0.51);
 
     // bins and dividers
     var binX = [-1.0, 0, 1.0];
@@ -633,9 +634,9 @@ p{margin:0}
     var hidden = new T.MeshBasicMaterial({ visible: false });
     binX.forEach(function (x, i) {
       var m = new T.MeshStandardMaterial({ color: binCols[i], roughness: 0.6, side: T.DoubleSide });
-      var bin = new T.Mesh(new T.BoxGeometry(0.86, 1.05, 1.15), [m, m, hidden, m, m, m]);
-      bin.position.set(x, 0.53, 0); scene.add(bin);
-      var rim = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(0.86, 1.05, 1.15)), new T.LineBasicMaterial({ color: new T.Color(binCols[i]).multiplyScalar(0.55) }));
+      var bin = new T.Mesh(new T.BoxGeometry(0.86, 0.95, 1.15), [m, m, hidden, m, m, m]);
+      bin.position.set(x, 0.48, 0); scene.add(bin);
+      var rim = new T.LineSegments(new T.EdgesGeometry(new T.BoxGeometry(0.86, 0.95, 1.15)), new T.LineBasicMaterial({ color: new T.Color(binCols[i]).multiplyScalar(0.55) }));
       rim.position.copy(bin.position); scene.add(rim);
       var name = binNames[i];
       var tex = textTexture(512, 160, function (ctx, w, h) {
@@ -643,26 +644,29 @@ p{margin:0}
         ctx.textAlign = "center"; ctx.textBaseline = "middle"; ctx.fillText(name, w / 2, h / 2 + 6);
       });
       var lab = new T.Mesh(new T.PlaneGeometry(0.56, 0.175), new T.MeshBasicMaterial({ map: tex, transparent: true }));
-      lab.position.set(x, 0.74, 0.578); scene.add(lab);
+      lab.position.set(x, 0.62, 0.578); scene.add(lab);
     });
-    box(0.02, 1.45, 1.3, dividerMat, -0.5, 0.725, 0);
-    box(0.02, 1.45, 1.3, dividerMat, 0.5, 0.725, 0);
+    box(0.02, 1.0, 1.3, dividerMat, -0.5, 0.5, 0);
+    box(0.02, 1.0, 1.3, dividerMat, 0.5, 0.5, 0);
 
-    // shuttle: carriage on the rail, flap on a hinge along its back edge
-    var shuttle = new T.Group(); scene.add(shuttle);
-    box(0.28, 0.15, 0.12, apricotMat, 0, 1.8, -0.55, shuttle);
-    box(0.03, 0.14, 0.03, metalMat, -0.09, 1.7, -0.5, shuttle);
-    box(0.03, 0.14, 0.03, metalMat, 0.09, 1.7, -0.5, shuttle);
-    var pivot = new T.Group(); pivot.position.set(0, 1.62, -0.46); shuttle.add(pivot);
-    box(0.8, 0.035, 0.92, apricotMat, 0, 0, 0.46, pivot);
-    box(0.03, 0.09, 0.92, apricotDark, -0.4, 0.045, 0.46, pivot);
-    box(0.03, 0.09, 0.92, apricotDark, 0.4, 0.045, 0.46, pivot);
-    box(0.8, 0.09, 0.03, apricotDark, 0, 0.045, 0.015, pivot);
+    // fixed guides: side chutes to the wet and other bins, centre funnel to the dry bin
+    var guideMat = new T.MeshStandardMaterial({ color: 0x9AA6B6, roughness: 0.5, metalness: 0.3, side: T.DoubleSide });
+    function slab(len, cx, cy, rz) { var g = box(len, 0.03, 0.9, guideMat, cx, cy, 0); g.rotation.z = rz; return g; }
+    slab(0.795, -0.599, 1.301, Math.PI / 4);
+    slab(0.795, 0.599, 1.301, -Math.PI / 4);
+    slab(0.418, -0.16, 1.22, -1.279);
+    slab(0.418, 0.16, 1.22, 1.279);
+
+    // tilting platform, pivoting on a front-to-back axis above the dry bin
+    var pivot = new T.Group(); pivot.position.set(0, PY, 0); scene.add(pivot);
+    box(PW, 0.04, 0.9, apricotMat, 0, 0, 0, pivot);
+    box(PW, 0.07, 0.03, apricotDark, 0, 0.035, 0.435, pivot);
+    box(PW, 0.07, 0.03, apricotDark, 0, 0.035, -0.435, pivot);
 
     // camera view lines, shown during capture
     var coneGeo = new T.BufferGeometry();
-    var lp = [-1.27, 1.95, 0.05];
-    var corners = [[-0.4, 1.64, -0.46], [0.4, 1.64, -0.46], [0.4, 1.64, 0.46], [-0.4, 1.64, 0.46]];
+    var lp = [-1.26, 2.12, 0.05];
+    var corners = [[-0.45, 1.92, -0.45], [0.45, 1.92, -0.45], [0.45, 1.92, 0.45], [-0.45, 1.92, 0.45]];
     var pts = [];
     corners.forEach(function (c) { pts.push(lp[0], lp[1], lp[2], c[0], c[1], c[2]); });
     coneGeo.setAttribute("position", new T.Float32BufferAttribute(pts, 3));
@@ -753,7 +757,7 @@ p{margin:0}
       item.rotation.set(Math.random() * 0.8, Math.random() * 3, Math.random() * 0.8);
       scene.add(item);
       await tween(340, function (t) { lidPivot.rotation.x = -1.15 * t; });
-      var yLand = 1.62 + 0.0175 + hh;
+      var yLand = PY + 0.02 + hh;
       var rx = item.rotation.x, rz = item.rotation.z;
       await tween(520, function (t) {
         item.position.y = startY + (yLand - startY) * t;
@@ -778,31 +782,46 @@ p{margin:0}
       ui.say(kind === "other" ? ("Not sure (" + pct + "%), so it goes to Other.") : (binNames[idx] + ", " + pct + "% sure."));
       await wait(430);
 
-      ui.step("slide");
-      var tx = binX[idx];
-      if (tx !== 0) { await tween(600, function (t) { shuttle.position.x = tx * t; }); } else { await wait(120); }
-      await tween(320, function (t) { pivot.rotation.x = 0.62 * t; });
-      var z0 = item.position.z;
-      await tween(360, function (t) { item.position.z = z0 + (1.04 - z0) * t; }, easeIn);
-      scene.attach(item);
-      var stackH = Math.min(0.5, binItems[idx].length * 0.06);
-      var target = new T.Vector3(tx + (Math.random() - 0.5) * 0.3, 0.06 + hh + stackH, (Math.random() - 0.5) * 0.5);
-      var p0 = item.position.clone();
-      var r0 = item.rotation.clone();
-      var spin = (Math.random() - 0.5) * 2;
-      await tween(460, function (t) {
-        item.position.lerpVectors(p0, target, t);
-        item.rotation.x = r0.x * (1 - t); item.rotation.y = r0.y + spin * t; item.rotation.z = r0.z * (1 - t);
-      }, easeIn);
+      ui.step("tilt");
+      var bx = binX[idx];
+      var stackH = Math.min(0.45, binItems[idx].length * 0.06);
+      var target = new T.Vector3(idx === 1 ? -0.04 + Math.random() * 0.06 : bx + (Math.random() - 0.5) * 0.3, 0.06 + hh + stackH, (Math.random() - 0.5) * 0.5);
+      var p0, r0, spin = (Math.random() - 0.5) * 2, endAngle;
+      if (idx === 1) {
+        // dry: a fast snap to vertical, then the item drops straight down through the funnel
+        endAngle = Math.PI / 2;
+        await tween(240, function (t) { pivot.rotation.z = endAngle * t; }, easeIn);
+        scene.attach(item);
+        p0 = item.position.clone();
+        await tween(480, function (t) { item.position.lerpVectors(p0, target, t); }, easeIn);
+      } else {
+        // wet tilts left, other tilts right; the item slides off the low edge and down its chute
+        var dir = idx === 0 ? -1 : 1;
+        endAngle = -dir * Math.PI / 4;
+        await tween(320, function (t) { pivot.rotation.z = endAngle * t; });
+        var x0 = item.position.x;
+        await tween(360, function (t) {
+          item.position.x = x0 + (dir * 0.62 - x0) * t;
+          if (kind === "wet") pivot.rotation.z = endAngle + 0.07 * Math.sin(t * Math.PI * 4);
+        }, easeIn);
+        pivot.rotation.z = endAngle;
+        scene.attach(item);
+        p0 = item.position.clone();
+        var chuteEnd = new T.Vector3(dir * 0.86, 1.02 + hh + 0.03, p0.z);
+        await tween(300, function (t) { item.position.lerpVectors(p0, chuteEnd, t); }, easeIn);
+        p0 = item.position.clone(); r0 = item.rotation.clone();
+        await tween(380, function (t) {
+          item.position.lerpVectors(p0, target, t);
+          item.rotation.x = r0.x * (1 - t); item.rotation.y = r0.y + spin * t; item.rotation.z = r0.z * (1 - t);
+        }, easeIn);
+      }
       binItems[idx].push(item);
       if (binItems[idx].length > 7) { var old = binItems[idx].shift(); scene.remove(old); dispose(old); }
       ui.done(kind);
 
       ui.step("ready");
-      await Promise.all([
-        tween(300, function (t) { pivot.rotation.x = 0.62 * (1 - t); }),
-        tx !== 0 ? tween(600, function (t) { shuttle.position.x = tx * (1 - t); }) : wait(1)
-      ]);
+      var a0 = pivot.rotation.z;
+      await tween(350, function (t) { pivot.rotation.z = a0 * (1 - t); });
       var secs = ((performance.now() - t0) / 1000).toFixed(1);
       ui.say("Sorted into " + binNames[idx] + " in " + secs + " seconds. Try another.");
       ui.step(null);
@@ -881,7 +900,7 @@ p{margin:0}
   var dropBtns = Array.prototype.slice.call(document.querySelectorAll("[data-drop]"));
   var caseBtn = document.getElementById("caseToggle");
   var counts = { wet: 0, dry: 0, other: 0 };
-  var order = ["detect", "see", "decide", "slide", "ready"];
+  var order = ["detect", "see", "decide", "tilt", "ready"];
 
   function setCaseLabel(open) {
     caseBtn.textContent = open ? "Close the case" : "Show inside";
